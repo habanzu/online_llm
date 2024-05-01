@@ -1,34 +1,91 @@
-use std::{cmp::Ordering, io};
-use rand::Rng;
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use log::info;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use reqwest::StatusCode;
 
-fn main() {
-    println!("Guess the number game!");
-    println!("Please input your guess");
+const URL: &str = "0.0.0.0:61347";
 
-    let secret_number = rand::thread_rng().gen_range(1..=100);
-    println!("The secret number is {secret_number}");
-    
-    loop {
-        let mut guess = String::new();
+#[derive(Serialize, Deserialize)]
+struct ChatCompletion {
+    id: String,
+    object: String,
+    created: i64,
+    model: String,
+    choices: Vec<Choice>,
+}
 
-        io::stdin()
-        .read_line(&mut guess)
-        .expect("Failed to read line");
+#[derive(Serialize, Deserialize)]
+struct Choice {
+    message: Message,
+    index: i32,
+    logprobs: Option<serde_json::Value>,
+    finish_reason: String,
+}
 
-        let guess: u32 = match guess.trim().parse() {
-            Ok(num) => num,
-            Err(_) => continue,
-        };
-        println!("You guessed: {guess}");
+#[derive(Serialize, Deserialize)]
+struct OpenAIRequest {
+    messages: Vec<Message>,
+}
 
-        match guess.cmp(&secret_number) {
-            Ordering::Less => println!("Too small!"),
-            Ordering::Greater => println!("Too big!"),
-            Ordering::Equal => {
-                println!("You win!");
-                break;
-            }
+#[derive(Serialize, Deserialize, Clone)]
+struct Message {
+    role: String,
+    content: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct OpenAIResponse {
+    id: String,
+    object: String,
+    created: i64,
+    model: String,
+    choices: Vec<Choice>,
+}
+
+async fn completions(body: web::Json<serde_json::Value>) -> impl Responder {
+    println!("Received {}", body);
+    let message = body["messages"][0]["content"].as_str().unwrap_or_default();
+    println!("Message: {}",message);
+    let client = Client::new();
+
+    let response = client.post("https://api.openai.com/v1/chat/completions")
+        .json(&*body)
+        .send()
+        .await;
+
+        match response {
+            Ok(resp) => {
+                match resp.status() {
+                    StatusCode::OK => match resp.json::<OpenAIResponse>().await {
+                        Ok(openai_resp) => HttpResponse::Ok().json(openai_resp),
+                        Err(e) => {
+                            info!("Failed to deserialize OpenAI response: {:?}", e);
+                            HttpResponse::InternalServerError().finish()
+                        },
+                    },
+                    _ => {
+                        let err_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                        info!("OpenAI API responded with an error: {}", err_text);
+                        HttpResponse::InternalServerError().body(err_text)
+                    }
+                }
+            },
+            Err(e) => {
+                info!("Failed to send request to OpenAI: {:?}", e);
+                HttpResponse::InternalServerError().finish()
+            },
         }
-    }
+    
+}
 
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    HttpServer::new(|| {
+        App::new()
+            .service(web::resource("/v1/chat/completions").route(web::post().to(completions)))
+    })
+    .bind(URL)?
+    .run()
+    .await
 }
