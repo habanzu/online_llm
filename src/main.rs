@@ -3,6 +3,8 @@ use log::info;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use reqwest::StatusCode;
+use dotenv::dotenv;
+use std::env;
 
 const URL: &str = "0.0.0.0:61347";
 
@@ -44,12 +46,14 @@ struct OpenAIResponse {
 }
 
 async fn completions(body: web::Json<serde_json::Value>) -> impl Responder {
-    println!("Received {}", body);
-    let message = body["messages"][0]["content"].as_str().unwrap_or_default();
-    println!("Message: {}",message);
+    
+    // Access the environment variable
+    dotenv().ok();
+    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not found in environment");
+        
     let client = Client::new();
-
     let response = client.post("https://api.openai.com/v1/chat/completions")
+        .bearer_auth(api_key) 
         .json(&*body)
         .send()
         .await;
@@ -81,6 +85,7 @@ async fn completions(body: web::Json<serde_json::Value>) -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+
     HttpServer::new(|| {
         App::new()
             .service(web::resource("/v1/chat/completions").route(web::post().to(completions)))
