@@ -58,28 +58,28 @@ async fn completions(body: web::Json<serde_json::Value>) -> impl Responder {
         .send()
         .await;
 
-        match response {
-            Ok(resp) => {
-                match resp.status() {
-                    StatusCode::OK => match resp.json::<OpenAIResponse>().await {
-                        Ok(openai_resp) => HttpResponse::Ok().json(openai_resp),
-                        Err(e) => {
-                            info!("Failed to deserialize OpenAI response: {:?}", e);
-                            HttpResponse::InternalServerError().finish()
-                        },
+    match response {
+        Ok(resp) => {
+            match resp.status() {
+                StatusCode::OK => match resp.json::<OpenAIResponse>().await {
+                    Ok(openai_resp) => HttpResponse::Ok().json(openai_resp),
+                    Err(e) => {
+                        info!("Failed to deserialize OpenAI response: {:?}", e);
+                        HttpResponse::InternalServerError().finish()
                     },
-                    _ => {
-                        let err_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                        info!("OpenAI API responded with an error: {}", err_text);
-                        HttpResponse::InternalServerError().body(err_text)
-                    }
+                },
+                _ => {
+                    let err_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                    info!("OpenAI API responded with an error: {}", err_text);
+                    HttpResponse::InternalServerError().body(err_text)
                 }
-            },
-            Err(e) => {
-                info!("Failed to send request to OpenAI: {:?}", e);
-                HttpResponse::InternalServerError().finish()
-            },
-        }
+            }
+        },
+        Err(e) => {
+            info!("Failed to send request to OpenAI: {:?}", e);
+            HttpResponse::InternalServerError().finish()
+        },
+    }
     
 }
 
