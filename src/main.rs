@@ -2,7 +2,6 @@ use serde::Deserialize;
 use reqwest::{Error, StatusCode};
 use dotenv::dotenv;
 use std::env;
-use actix_web::{HttpResponse};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -17,14 +16,11 @@ async fn main() -> Result<(), Error> {
         query, google_api_key, cx
     );
 
-    // let response = reqwest::get(&url).await?;
-    let response = match reqwest::get(&url).await {
+    match reqwest::get(&url).await {
         Ok(response) => {
-            println!("Reponse status {}", response.status());
             match response.status() {
                 StatusCode::OK => match response.json::<GoogleSearchResults>().await {
                     Ok(google_resp) => {
-                        println!("{}", google_resp.kind);
                         for item in google_resp.items {
                             println!("Title: {}, Snippet: {}", item.title, item.snippet);
                         }
@@ -40,17 +36,8 @@ async fn main() -> Result<(), Error> {
         },
         Err(e) => {
             println!("Failed to send request to Google: {:?}", e);
-            // HttpResponse::InternalServerError().finish()
         },
     }; 
-    // {
-    //     Ok(response) => HttpResponse::Ok().json(response),
-    //     Err(e) => {
-    //         info!("Failed to deserialize Google response: {:?}", e);
-    //         HttpResponse::InternalServerError().finish()
-    //     },
-    // };
-    // let results = response.json::<GoogleSearchResults>().await?;
 
     println!("Printing items.");
 
