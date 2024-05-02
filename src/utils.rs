@@ -69,6 +69,7 @@ pub struct Item {
     title: String,
     link: String,
     snippet: String,
+    date: Option<String>,
 }
 
 pub async fn search_serper_google(query: &String) -> String{
@@ -107,6 +108,10 @@ pub async fn search_serper_google(query: &String) -> String{
             message.push_str("\n");
             message.push_str(&format!("Snippet: {}", item.snippet));
             message.push_str("\n");
+            if let Some(date) = &item.date {
+                message.push_str(&format!("Date: {}", date));
+                message.push_str("\n");
+            }
             // message.push_str(&format!("Link: {}", item.link));
             // message.push_str("\n");
         }

@@ -35,15 +35,14 @@ async fn completions(mut body: web::Json<utils::OpenAIRequest>) -> impl Responde
     let instructions  = utils::Message::new("system", &config.first_instruction);
     let utc_now: DateTime<Utc> = Utc::now();
     let time_message = utils::Message::new(String::from("system"), format!("The current time is {}", utc_now));
-    println!("{}", time_message.content);
 
     body.messages.insert(0, time_message);
     body.messages.insert(0, instructions);
     body.messages.insert(0, examples);
 
-    if high_accuracy {
-        body.model = String::from("gpt-3.5-turbo-0125");
-    }
+    // if high_accuracy {
+    //     body.model = String::from("gpt-3.5-turbo-0125");
+    // }
     let response = utils::open_ai_response(&*body).await;
     if high_accuracy {
         body.model = String::from("gpt-4-turbo");
