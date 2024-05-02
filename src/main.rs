@@ -4,6 +4,8 @@ use std::fs;
 use serde::Deserialize;
 
 use crate::utils::Message;
+extern crate chrono;
+use chrono::{DateTime, Utc};
 
 mod utils;
 
@@ -31,6 +33,11 @@ async fn completions(mut body: web::Json<utils::OpenAIRequest>) -> impl Responde
     // Create instructions and run first OpenAI request. 
     let examples  = utils::Message::new("system", &config.examples);
     let instructions  = utils::Message::new("system", &config.first_instruction);
+    let utc_now: DateTime<Utc> = Utc::now();
+    let time_message = utils::Message::new(String::from("system"), format!("The current time is {}", utc_now));
+    println!("{}", time_message.content);
+
+    body.messages.insert(0, time_message);
     body.messages.insert(0, instructions);
     body.messages.insert(0, examples);
 
@@ -47,7 +54,7 @@ async fn completions(mut body: web::Json<utils::OpenAIRequest>) -> impl Responde
     println!("Query 1: {}", query);
     // let query = encode(&query).into_owned();
     let data = utils::search_serper_google( &query).await;
-    println!("{}",data);
+    // println!("{}",data);
     let results_message = Message::new("system", &data);
     body.messages.push(results_message);
     // let google_resp = utils::search_google(&query).await;
@@ -67,8 +74,6 @@ async fn completions(mut body: web::Json<utils::OpenAIRequest>) -> impl Responde
         let results_message = Message::new("system", &data);
         body.messages.push(results_message);
         println!("{}", data);
-    // let google_resp = utils::search_google(&query).await;
-    // body.messages.push(utils::message_from_google_search(google_resp));
     }
 
     // Insert final instructions
