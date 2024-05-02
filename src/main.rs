@@ -1,86 +1,31 @@
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use log::info;
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
-use reqwest::StatusCode;
-use dotenv::dotenv;
-use std::env;
+use actix_web::{web, App, HttpServer, Responder};
+
+mod utils;
 
 const URL: &str = "0.0.0.0:61347";
+const INSTRUCTIONS: &str = "You are a search engine and personal assistant. A list of the titles and and snippets of the first 10 google results will be provided additionally to the question. Answer the question to the best of your possibility given the limited information. Include links to sources if possible not counting against the word limit.";
 
-#[derive(Serialize, Deserialize)]
-struct ChatCompletion {
-    id: String,
-    object: String,
-    created: i64,
-    model: String,
-    choices: Vec<Choice>,
-}
+async fn completions(mut body: web::Json<utils::OpenAIRequest>) -> impl Responder {
 
-#[derive(Serialize, Deserialize)]
-struct Choice {
-    message: Message,
-    index: i32,
-    logprobs: Option<serde_json::Value>,
-    finish_reason: String,
-}
+    // Create instructions and prepend to request. 
+    let instructions  = utils::Message::new("system", INSTRUCTIONS);
 
-#[derive(Serialize, Deserialize)]
-struct OpenAIRequest {
-    messages: Vec<Message>,
-}
+    body.messages.insert(0, instructions);
 
-#[derive(Serialize, Deserialize, Clone)]
-struct Message {
-    role: String,
-    content: String,
-}
+    //Extract user question and send to Google
+    let last_message = match body.messages.last() {
+        Some(message) => {Ok(message.content.clone())},
+        None => {Err("Received message was empty.")},
+    }.expect("Received message was empty.");
 
-#[derive(Serialize, Deserialize)]
-struct OpenAIResponse {
-    id: String,
-    object: String,
-    created: i64,
-    model: String,
-    choices: Vec<Choice>,
-}
+    let query = &last_message;
 
-async fn completions(body: web::Json<serde_json::Value>) -> impl Responder {
-    
-    // Access the environment variable
-    dotenv().ok();
-    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not found in environment");
-        
-    let client = Client::new();
-    let response = client.post("https://api.openai.com/v1/chat/completions")
-        .bearer_auth(api_key) 
-        .json(&*body)
-        .send()
-        .await;
+    let google_resp = utils::search_google(query).await;
 
-    match response {
-        Ok(resp) => {
-            match resp.status() {
-                StatusCode::OK => match resp.json::<OpenAIResponse>().await {
-                    Ok(openai_resp) => HttpResponse::Ok().json(openai_resp),
-                    Err(e) => {
-                        info!("Failed to deserialize OpenAI response: {:?}", e);
-                        HttpResponse::InternalServerError().finish()
-                    },
-                },
-                _ => {
-                    let err_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                    info!("OpenAI API responded with an error: {}", err_text);
-                    HttpResponse::InternalServerError().body(err_text)
-                }
-            }
-        },
-        Err(e) => {
-            info!("Failed to send request to OpenAI: {:?}", e);
-            HttpResponse::InternalServerError().finish()
-        },
-    }
-    
+    body.messages.push(utils::message_from_google_search(google_resp));
+ 
+    // Send modified request to OpenAI and return result
+    utils::return_open_ai_response(&*body).await
 }
 
 #[actix_web::main]
