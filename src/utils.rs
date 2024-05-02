@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use reqwest::StatusCode;
 use dotenv::dotenv;
 use std::env;
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{web, HttpResponse};
 use reqwest::Client;
 use log::info;
 
