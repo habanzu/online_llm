@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use reqwest::StatusCode;
 use dotenv::dotenv;
 use std::env;
-use actix_web::{web, HttpResponse};
+use actix_web::{web, Error, HttpResponse};
 use reqwest::Client;
 use log::info;
 
@@ -17,7 +17,7 @@ pub struct ChatCompletion {
 
 #[derive(Serialize, Deserialize)]
 pub struct Choice {
-    message: Message,
+    pub message: Message,
     index: i32,
     logprobs: Option<serde_json::Value>,
     finish_reason: String,
@@ -48,7 +48,7 @@ pub struct OpenAIResponse {
     object: String,
     created: i64,
     model: String,
-    choices: Vec<Choice>,
+    pub choices: Vec<Choice>,
 }
 
 #[derive(Deserialize)]
@@ -95,6 +95,39 @@ pub async fn search_google(query: &String) -> GoogleSearchResults {
     }.expect("Google Search result is empty.");
 
     google_resp
+}
+
+pub async fn open_ai_response(request: &OpenAIRequest) -> OpenAIResponse{
+    dotenv().ok();
+    let open_ai_api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not found in environment");
+    
+    let request = web::Json(request);
+
+    let client = Client::new();
+    let response = client.post("https://api.openai.com/v1/chat/completions")
+        .bearer_auth(open_ai_api_key) 
+        .json(&*request)
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) => {
+            match resp.status() {
+                StatusCode::OK => match resp.json::<OpenAIResponse>().await {
+                    Ok(openai_resp) => Ok(openai_resp),
+                    Err(_) => {
+                        Err("Failed to deserialize OpenAI response:")
+                    },
+                },
+                _ => {
+                    Err("Failure with OpenAI response status")
+                }
+            }
+        },
+        Err(_) => {
+            Err("Bad HTTP Response.")
+        }
+    }.expect("Failure to retrieve OpenAI answer.")
 }
 
 pub async fn return_open_ai_response(request: &OpenAIRequest) -> HttpResponse {
