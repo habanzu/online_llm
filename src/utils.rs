@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
 use reqwest::StatusCode;
+use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use dotenv::dotenv;
 use std::env;
-use actix_web::{web, Error, HttpResponse};
+use actix_web::{web, HttpResponse};
 use reqwest::Client;
 use log::info;
+use serde_json::json;
 
 #[derive(Serialize, Deserialize)]
 pub struct ChatCompletion {
@@ -25,7 +27,7 @@ pub struct Choice {
 
 #[derive(Serialize, Deserialize)]
 pub struct OpenAIRequest {
-    model: String,
+    pub model: String,
     pub messages: Vec<Message>,
 }
 
@@ -61,6 +63,34 @@ pub struct Item {
     title: String,
     link: String,
     snippet: String,
+}
+
+pub async fn search_serper_google(query: &String) -> String{
+    let client = reqwest::Client::new();
+    let url = "https://google.serper.dev/search";
+
+    // Creating the payload as a JSON object
+    let payload = json!({
+        "q": query
+    });
+
+    // Creating and setting headers
+    let mut headers = HeaderMap::new();
+    headers.insert("X-API-KEY", HeaderValue::from_static("567a754bf49e917366276b03682ca0e2b5e58328"));
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+    // Making the POST request
+    let res = client.post(url)
+        .headers(headers)
+        .json(&payload)
+        .send()
+        .await.expect("Serper Call failed.");
+
+    // Reading the response
+    let data = res.text().await.expect("Received data is empty.");
+
+    // println!("{}", data);
+    data
 }
 
 pub async fn search_google(query: &String) -> GoogleSearchResults {
