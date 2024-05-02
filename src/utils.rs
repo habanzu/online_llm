@@ -59,6 +59,12 @@ pub struct GoogleSearchResults {
 }
 
 #[derive(Deserialize)]
+pub struct SerperResults {
+    organic: Option<Vec<Item>>,
+    knowledgeGraph: Option<String>
+}
+
+#[derive(Deserialize)]
 pub struct Item {
     title: String,
     link: String,
@@ -88,9 +94,32 @@ pub async fn search_serper_google(query: &String) -> String{
 
     // Reading the response
     let data = res.text().await.expect("Received data is empty.");
+    let result:Result<SerperResults, serde_json::Error> = serde_json::from_str(&data);
+    let result = result.expect("Unable to read serper result.");
 
-    // println!("{}", data);
-    data
+    let mut message = String::from("Google Search results added to question: \n");
+
+    
+
+    if let Some(items) = result.organic {
+        for item in items.iter().rev() {
+            message.push_str(&format!("Title: {}", item.title));
+            message.push_str("\n");
+            message.push_str(&format!("Snippet: {}", item.snippet));
+            message.push_str("\n");
+            // message.push_str(&format!("Link: {}", item.link));
+            // message.push_str("\n");
+        }
+    };
+
+    if let Some(graph) = result.knowledgeGraph {
+        message.push_str("\nKnowledge Graph\n");
+        message.push_str(&graph);
+        message.push_str("\n");
+    }
+
+    message
+
 }
 
 pub async fn search_google(query: &String) -> GoogleSearchResults {
