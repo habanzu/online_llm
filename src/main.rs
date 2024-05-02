@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::value::Value;
 use reqwest::{Error, StatusCode};
 use dotenv::dotenv;
 use std::env;
@@ -27,6 +28,7 @@ struct Choice {
 
 #[derive(Serialize, Deserialize)]
 struct OpenAIRequest {
+    model: String,
     messages: Vec<Message>,
 }
 
@@ -54,11 +56,12 @@ struct GoogleSearchResults {
 #[derive(Deserialize)]
 struct Item {
     title: String,
-    // link: String,
+    link: String,
     snippet: String,
 }
 
-async fn completions(body: web::Json<serde_json::Value>) -> impl Responder {
+// async fn completions(body: web::Json<serde_json::Value>) -> impl Responder {
+async fn completions(mut body: web::Json<OpenAIRequest>) -> impl Responder {
     
     // Access the environment variable
     dotenv().ok();
@@ -66,23 +69,12 @@ async fn completions(body: web::Json<serde_json::Value>) -> impl Responder {
     let google_api_key = env::var("GOOGLE_API_KEY").expect("GOOGLE_API_KEY not found in environment");
     let cx = env::var("SEARCH_ENGINE_ID").expect("SEARCH_ENGINE_ID not found in environment");
 
-    if let Some(messages) = body["messages"].as_array() {
-        if let Some(message) = messages.last(){
-            println!("{}", message);
-        }
-    }
-
-    let messages = match body["messages"].as_array() {
-        Some(messages) => {messages.clone()},
-        None => {vec![]},
-    };
+    let messages = &mut body.messages;
 
     let last_message = match messages.last() {
-        Some(message) => {Ok(message.to_string())},
+        Some(message) => {Ok(message.content.clone())},
         None => {Err("Received message was emtpy.")},
     }.expect("Received message was empty.");
-
-    println!("{}", last_message);
 
     let query = &last_message;
 
@@ -91,63 +83,42 @@ async fn completions(body: web::Json<serde_json::Value>) -> impl Responder {
         query, google_api_key, cx
     );
 
-    match reqwest::get(&url).await {
-        Ok(response) => {
-            match response.status() {
-                StatusCode::OK => match response.json::<GoogleSearchResults>().await {
-                    Ok(google_resp) => {
-                        for item in google_resp.items {
-                            println!("Title: {}, Snippet: {}", item.title, item.snippet);
+    let google_resp = match reqwest::get(&url).await {
+            Ok(response) => {
+                match response.status() {
+                    StatusCode::OK => match response.json::<GoogleSearchResults>().await {
+                        Ok(google_resp) => {
+                            // for item in google_resp.items.iter() {
+                            //         println!("Title: {}, Snippet: {}", item.title, item.snippet);
+                            //     }
+                            Ok(google_resp)
+                        },
+                        Err(e) => {
+                            Err(format!("Error when deserializing Google response {:?}", e))
                         }
                     },
-                    Err(e) => {
-                        println!("Error when deserializing Google response {:?}", e);
+                    _ => {
+                        Err(String::from("HTTP Request with bad status code."))
                     }
-                },
-                _ => {
-                    println!("HTTP Request with bad status code.")
                 }
-            }
-        },
-        Err(e) => {
-            println!("Failed to send request to Google: {:?}", e);
-        },
-    }; 
-
-    // let google_resp = match reqwest::get(&url).await {
-    //         Ok(response) => {
-    //             match response.status() {
-    //                 StatusCode::OK => match response.json::<GoogleSearchResults>().await {
-    //                     Ok(google_resp) => {
-    //                         for item in google_resp.items.iter() {
-    //                                 println!("Title: {}, Snippet: {}", item.title, item.snippet);
-    //                             }
-    //                         Ok(google_resp)
-    //                     },
-    //                     Err(e) => {
-    //                         Err(format!("Error when deserializing Google response {:?}", e))
-    //                     }
-    //                 },
-    //                 _ => {
-    //                     Err(String::from("HTTP Request with bad status code."))
-    //                 }
-    //             }
-    //         },
-    //         Err(e) => {
-    //             Err(format!("Failed to send request to Google: {:?}", e))
-    //         },
-    //     }.expect("Google Search result is empty.");
+            },
+            Err(e) => {
+                Err(format!("Failed to send request to Google: {:?}", e))
+            },
+        }.expect("Google Search result is empty.");
     
-    // let mut message = last_message;
+    let mut message = last_message;
 
-    // for item in google_resp.items {
-    //     message.push_str("\n");
-    //     message.push_str(&format!("Title: {}", item.title));
-    //     message.push_str("\n");
-    //     message.push_str(&format!("Snippet: {}", item.snippet));
-    // }
+    for item in google_resp.items {
+        message.push_str("\n");
+        message.push_str(&format!("Title: {}", item.title));
+        message.push_str("\n");
+        message.push_str(&format!("Snippet: {}", item.snippet));
+        message.push_str("\n");
+        message.push_str(&format!("Link: {}", item.link));
+    }
 
-    // println!("{}", message);
+    messages.push(Message{role : String::from("system"), content: message});
         
     let client = Client::new();
     let response = client.post("https://api.openai.com/v1/chat/completions")
