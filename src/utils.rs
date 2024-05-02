@@ -122,40 +122,6 @@ pub async fn search_serper_google(query: &String) -> String{
 
 }
 
-pub async fn search_google(query: &String) -> GoogleSearchResults {
-    dotenv().ok();
-    let google_api_key = env::var("GOOGLE_API_KEY").expect("GOOGLE_API_KEY not found in environment");
-    let cx = env::var("SEARCH_ENGINE_ID").expect("SEARCH_ENGINE_ID not found in environment");
-
-    let url = format!(
-        "https://www.googleapis.com/customsearch/v1?q={}&key={}&cx={}",
-        query, google_api_key, cx
-    );
-
-    let google_resp = match reqwest::get(&url).await {
-        Ok(response) => {
-            match response.status() {
-                StatusCode::OK => match response.json::<GoogleSearchResults>().await {
-                    Ok(google_resp) => {
-                        Ok(google_resp)
-                    },
-                    Err(e) => {
-                        Err(format!("Error when deserializing Google response {:?}", e))
-                    }
-                },
-                _ => {
-                    Err(String::from("HTTP Request with bad status code."))
-                }
-            }
-        },
-        Err(e) => {
-            Err(format!("Failed to send request to Google: {:?}", e))
-        },
-    }.expect("Google Search result is empty.");
-
-    google_resp
-}
-
 pub async fn open_ai_response(request: &OpenAIRequest) -> OpenAIResponse{
     dotenv().ok();
     let open_ai_api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not found in environment");
@@ -225,19 +191,4 @@ pub async fn return_open_ai_response(request: &OpenAIRequest) -> HttpResponse {
             HttpResponse::InternalServerError().finish()
         },
     }
-}
-
-pub fn message_from_google_search(google_resp: GoogleSearchResults) -> Message {
-    let mut message = String::from("Google Search results added to question: \n");
-
-    for item in google_resp.items {
-        message.push_str(&format!("Title: {}", item.title));
-        message.push_str("\n");
-        message.push_str(&format!("Snippet: {}", item.snippet));
-        message.push_str("\n");
-        message.push_str(&format!("Link: {}", item.link));
-        message.push_str("\n");
-    }
-
-    Message{role : String::from("system"), content: message}
 }

@@ -41,7 +41,9 @@ async fn completions(mut body: web::Json<utils::OpenAIRequest>) -> impl Responde
     body.messages.insert(0, instructions);
     body.messages.insert(0, examples);
 
-    body.model = String::from("gpt-3.5-turbo-16k");
+    if high_accuracy {
+        body.model = String::from("gpt-3.5-turbo-0125");
+    }
     let response = utils::open_ai_response(&*body).await;
     if high_accuracy {
         body.model = String::from("gpt-4-turbo");
