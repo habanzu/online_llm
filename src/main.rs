@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::value::Value;
 use reqwest::{Error, StatusCode};
 use dotenv::dotenv;
 use std::env;
@@ -60,23 +59,10 @@ struct Item {
     snippet: String,
 }
 
-// async fn completions(body: web::Json<serde_json::Value>) -> impl Responder {
-async fn completions(mut body: web::Json<OpenAIRequest>) -> impl Responder {
-    
-    // Access the environment variable
+async fn search_google(query: &String) -> GoogleSearchResults {
     dotenv().ok();
-    let open_ai_api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not found in environment");
     let google_api_key = env::var("GOOGLE_API_KEY").expect("GOOGLE_API_KEY not found in environment");
     let cx = env::var("SEARCH_ENGINE_ID").expect("SEARCH_ENGINE_ID not found in environment");
-
-    let messages = &mut body.messages;
-
-    let last_message = match messages.last() {
-        Some(message) => {Ok(message.content.clone())},
-        None => {Err("Received message was emtpy.")},
-    }.expect("Received message was empty.");
-
-    let query = &last_message;
 
     let url = format!(
         "https://www.googleapis.com/customsearch/v1?q={}&key={}&cx={}",
@@ -84,46 +70,40 @@ async fn completions(mut body: web::Json<OpenAIRequest>) -> impl Responder {
     );
 
     let google_resp = match reqwest::get(&url).await {
-            Ok(response) => {
-                match response.status() {
-                    StatusCode::OK => match response.json::<GoogleSearchResults>().await {
-                        Ok(google_resp) => {
-                            // for item in google_resp.items.iter() {
-                            //         println!("Title: {}, Snippet: {}", item.title, item.snippet);
-                            //     }
-                            Ok(google_resp)
-                        },
-                        Err(e) => {
-                            Err(format!("Error when deserializing Google response {:?}", e))
-                        }
+        Ok(response) => {
+            match response.status() {
+                StatusCode::OK => match response.json::<GoogleSearchResults>().await {
+                    Ok(google_resp) => {
+                        Ok(google_resp)
                     },
-                    _ => {
-                        Err(String::from("HTTP Request with bad status code."))
+                    Err(e) => {
+                        Err(format!("Error when deserializing Google response {:?}", e))
                     }
+                },
+                _ => {
+                    Err(String::from("HTTP Request with bad status code."))
                 }
-            },
-            Err(e) => {
-                Err(format!("Failed to send request to Google: {:?}", e))
-            },
-        }.expect("Google Search result is empty.");
+            }
+        },
+        Err(e) => {
+            Err(format!("Failed to send request to Google: {:?}", e))
+        },
+    }.expect("Google Search result is empty.");
+
+    google_resp
+}
+
+async fn return_open_ai_response(request: &OpenAIRequest) -> HttpResponse {
     
-    let mut message = last_message;
+    dotenv().ok();
+    let open_ai_api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not found in environment");
+    
+    let request = web::Json(request);
 
-    for item in google_resp.items {
-        message.push_str("\n");
-        message.push_str(&format!("Title: {}", item.title));
-        message.push_str("\n");
-        message.push_str(&format!("Snippet: {}", item.snippet));
-        message.push_str("\n");
-        message.push_str(&format!("Link: {}", item.link));
-    }
-
-    messages.push(Message{role : String::from("system"), content: message});
-        
     let client = Client::new();
     let response = client.post("https://api.openai.com/v1/chat/completions")
         .bearer_auth(open_ai_api_key) 
-        .json(&*body)
+        .json(&*request)
         .send()
         .await;
 
@@ -149,7 +129,33 @@ async fn completions(mut body: web::Json<OpenAIRequest>) -> impl Responder {
             HttpResponse::InternalServerError().finish()
         },
     }
+}
+
+async fn completions(mut body: web::Json<OpenAIRequest>) -> impl Responder {
     
+    let last_message = match body.messages.last() {
+        Some(message) => {Ok(message.content.clone())},
+        None => {Err("Received message was empty.")},
+    }.expect("Received message was empty.");
+
+    let query = &last_message;
+
+    let google_resp = search_google(query).await;
+    
+    let mut message = String::from("Google Search results added to question: \n");
+
+    for item in google_resp.items {
+        message.push_str(&format!("Title: {}", item.title));
+        message.push_str("\n");
+        message.push_str(&format!("Snippet: {}", item.snippet));
+        message.push_str("\n");
+        message.push_str(&format!("Link: {}", item.link));
+        message.push_str("\n");
+    }
+
+    body.messages.push(Message{role : String::from("system"), content: message});
+ 
+    return_open_ai_response(&*body).await
 }
 
 #[actix_web::main]
