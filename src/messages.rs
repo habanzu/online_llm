@@ -158,8 +158,8 @@ pub async fn search_serper_google(query: &String) -> String{
                 message.push_str(&format!("Date: {}", date));
                 message.push_str("\n");
             }
-            // message.push_str(&format!("Link: {}", item.link));
-            // message.push_str("\n");
+            message.push_str(&format!("Link: {}", item.link));
+            message.push_str("\n");
         }
     };
 
