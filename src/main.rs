@@ -1,36 +1,17 @@
-use actix_web::{web, App, HttpServer, Responder};
+use actix_web::{web, App, HttpServer, Responder, HttpRequest, HttpResponse};
+
+extern crate chrono;
+use chrono::Utc;
 
 mod utils;
+mod messages;
+use crate::messages::{search_serper_google, open_ai_response, return_open_ai_response};
 
-const URL: &str = "0.0.0.0:61347";
-const INSTRUCTIONS: &str = "You are a search engine and personal assistant. A list of the titles and and snippets of the first 10 google results will be provided additionally to the question. Answer the question to the best of your possibility given the limited information. Include links to sources if possible not counting against the word limit.";
-
-async fn completions(mut body: web::Json<utils::OpenAIRequest>) -> impl Responder {
-
-    // Create instructions and prepend to request. 
-    let instructions  = utils::Message::new("system", INSTRUCTIONS);
-
-    body.messages.insert(0, instructions);
-
-    //Extract user question and send to Google
-    let last_message = match body.messages.last() {
-        Some(message) => {Ok(message.content.clone())},
-        None => {Err("Received message was empty.")},
-    }.expect("Received message was empty.");
-
-    let query = &last_message;
-
-    let google_resp = utils::search_google(query).await;
-
-    body.messages.push(utils::message_from_google_search(google_resp));
- 
-    // Send modified request to OpenAI and return result
-    utils::return_open_ai_response(&*body).await
-}
+// HTTPS requests are getting forwarded from nginx to localhost
+const URL: &str = "127.0.0.1:61347";
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-
     HttpServer::new(|| {
         App::new()
             .service(web::resource("/v1/chat/completions").route(web::post().to(completions)))
@@ -38,4 +19,62 @@ async fn main() -> std::io::Result<()> {
     .bind(URL)?
     .run()
     .await
+}
+
+async fn completions(req: HttpRequest, mut body: web::Json<messages::OpenAIRequest>) -> impl Responder {
+    // Check the API key in the HTTP header
+    if !utils::authorize(req){
+        return HttpResponse::Unauthorized().body("Invalid or missing API key")
+    }
+
+    // Load prompts from config
+    let config = utils::Config::new(String::from("config.json"));
+
+    let user_question = body.messages[0].clone();
+
+    // Create instructions and ask model for Google query 
+    prepend_message(&mut body, &config.first_instruction);
+    prepend_message(&mut body, &format!("The current time is {}",  Utc::now()));
+    prepend_message(&mut body, &config.examples);
+
+    let response = open_ai_response(&*body).await;
+    
+    // Run first search query based on Models output and append results.
+    append_message(&mut body, &response.choices[0].message.content);
+    let query = &response.choices[0].message.content;
+    println!("Query 1: {}", query);
+    let search_results = search_serper_google(query).await;
+    append_message(&mut body, &search_results);
+
+    // With GPT-4, run a second google search
+    if body.model == "gpt-4-turbo" {
+        append_message(&mut body, &config.second_instruction);
+        let response = open_ai_response(&*body).await;
+        append_message(&mut body, &response.choices[0].message.content);
+
+        let query = &response.choices[0].message.content;
+        println!("Query 2: {}", query);
+        let search_results = search_serper_google(&query).await;
+        append_message(&mut body, &search_results)
+    }
+
+    // Insert final instructions
+    append_message(&mut body, &config.final_instruction);
+
+    // Repeat user question
+    body.messages.push(user_question);
+ 
+    // Send modified request to OpenAI and return result to user
+    return_open_ai_response(&*body).await
+}
+
+
+fn prepend_message(body: &mut web::Json<messages::OpenAIRequest>, message: &String){
+    let message  = messages::Message::new("system", &message);
+    body.messages.insert(0, message);
+}
+
+fn append_message(body: &mut web::Json<messages::OpenAIRequest>, message: &String){
+    let message  = messages::Message::new("system", &message);
+    body.messages.push(message);
 }
