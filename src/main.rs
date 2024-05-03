@@ -31,7 +31,10 @@ async fn answer_question(req: HttpRequest, mut body: web::Json<messages::OpenAIR
     // Load prompts from config
     let config = utils::Config::new(String::from("config.json"));
 
-    let user_question = body.messages[0].clone();
+    let user_question = match body.messages.last() {
+        Some(msg) => {msg.clone()},
+        None => {return HttpResponse::BadRequest().body("Empty user request")}
+    };
 
     // Create instructions and ask model for Google query 
     prepend_message(&mut body, &config.first_instruction);
