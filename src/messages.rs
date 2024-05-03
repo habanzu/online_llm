@@ -94,14 +94,16 @@ pub async fn open_ai_response(request: &OpenAIRequest) -> Result<OpenAIResponse,
             }
         },
         Err(_) => {
-            Err("Bad HTTP Response.")
+            Err("Open AI bad HTTP response")
         }
     }
 }
 
 pub async fn return_open_ai_response(request: &OpenAIRequest) -> HttpResponse {
-    let response  = open_ai_response(request).await;
-    HttpResponse::Ok().json(response)
+    match open_ai_response(request).await {
+        Ok(resp) => {HttpResponse::Ok().json(resp)},
+        Err(e) => {HttpResponse::ServiceUnavailable().body(format!("Open AI unreachable. {}", e))}
+    }
 }
 
 pub async fn search_serper_google(query: &String) -> String{
