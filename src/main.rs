@@ -14,14 +14,15 @@ const URL: &str = "127.0.0.1:61347";
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
-            .service(web::resource("/v1/chat/completions").route(web::post().to(completions)))
+            .service(web::resource("/v1/chat/completions").route(web::post().to(answer_question)))
     })
     .bind(URL)?
     .run()
     .await
 }
 
-async fn completions(req: HttpRequest, mut body: web::Json<messages::OpenAIRequest>) -> impl Responder {
+async fn answer_question(req: HttpRequest, mut body: web::Json<messages::OpenAIRequest>) -> impl Responder {
+
     // Check the API key in the HTTP header
     if !utils::authorize(req){
         return HttpResponse::Unauthorized().body("Invalid or missing API key")
