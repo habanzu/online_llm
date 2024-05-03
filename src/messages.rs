@@ -1,3 +1,4 @@
+use actix_web::http::Error;
 use serde::{Deserialize, Serialize};
 use reqwest::StatusCode;
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
@@ -127,12 +128,22 @@ pub async fn search_serper_google(query: &String) -> String{
         .headers(headers)
         .json(&payload)
         .send()
-        .await.expect("Serper Call failed.");
+        .await;
+
+    let res = match res {
+        Ok(result) => {result},
+        Err(_) => {return String::from("Google Search failed")}
+    };
 
     // Reading the response
-    let data = res.text().await.expect("Received data is empty.");
-    let result:Result<SerperResults, serde_json::Error> = serde_json::from_str(&data);
-    let result = result.expect("Unable to read serper result.");
+    let data = match res.text().await {
+        Ok(data) => {data},
+        Err(_) => {return String::from("Google Search failed")}
+    };
+    let result:SerperResults = match serde_json::from_str(&data){
+        Ok(result) => {result},
+        Err(_) => {return String::from("Google Search failed")}
+    };
 
     let mut message = String::from("Google Search results added to question: \n");
 
