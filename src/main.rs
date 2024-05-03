@@ -1,4 +1,4 @@
-use actix_web::{web, App, HttpServer, Responder};
+use actix_web::{web, App, HttpServer, Responder, HttpRequest, HttpResponse};
 use urlencoding::encode;
 use std::fs;
 use serde::Deserialize;
@@ -9,7 +9,8 @@ use chrono::{DateTime, Utc};
 
 mod utils;
 
-const URL: &str = "0.0.0.0:61347";
+// HTTPS requests are getting forwarded from nginx to localhost
+const URL: &str = "127.0.0.1:61347";
 
 #[derive(Deserialize)]
 struct Config {
@@ -19,7 +20,11 @@ struct Config {
     final_instruction: String
 }
 
-async fn completions(mut body: web::Json<utils::OpenAIRequest>) -> impl Responder {
+async fn completions(req: HttpRequest, mut body: web::Json<utils::OpenAIRequest>) -> impl Responder {
+    if !utils::authorize(req){
+        return HttpResponse::Unauthorized().body("Invalid or missing token")
+    }
+
     // Load prompts from config
     let file_path = "src/config.json";
     let file_content = fs::read_to_string(file_path).expect("Could not read file.");

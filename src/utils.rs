@@ -3,7 +3,7 @@ use reqwest::StatusCode;
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use dotenv::dotenv;
 use std::env;
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpResponse, HttpRequest};
 use reqwest::Client;
 use log::info;
 use serde_json::json;
@@ -70,6 +70,25 @@ pub struct Item {
     link: String,
     snippet: String,
     date: Option<String>,
+}
+
+pub fn authorize(req: HttpRequest) -> bool{
+    dotenv().ok();
+    let api_key = env::var("API_KEY").expect("API_KEY not found in environment");
+    
+    if let Some(auth_header) = req.headers().get("Authorization") {
+        if let Ok(auth_str) = auth_header.to_str() {
+            if auth_str.starts_with("Bearer ") {
+                let token = auth_str.trim_start_matches("Bearer ");
+
+                let valid_token = api_key;
+                if token == valid_token {
+                    return true
+                }
+            }
+        }
+    }
+    return false
 }
 
 pub async fn search_serper_google(query: &String) -> String{
