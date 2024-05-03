@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use reqwest::StatusCode;
+use reqwest::{StatusCode, Error};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use dotenv::dotenv;
 use std::env;
@@ -66,7 +66,7 @@ pub struct Item {
     date: Option<String>,
 }
 
-pub async fn open_ai_response(request: &OpenAIRequest) -> OpenAIResponse{
+pub async fn open_ai_response(request: &OpenAIRequest) -> Result<OpenAIResponse, &str>{
     dotenv().ok();
     let open_ai_api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not found in environment");
     
@@ -85,7 +85,7 @@ pub async fn open_ai_response(request: &OpenAIRequest) -> OpenAIResponse{
                 StatusCode::OK => match resp.json::<OpenAIResponse>().await {
                     Ok(openai_resp) => Ok(openai_resp),
                     Err(_) => {
-                        Err("Failed to deserialize OpenAI response:")
+                        Err("Failed to deserialize OpenAI response.")
                     },
                 },
                 _ => {
@@ -94,14 +94,16 @@ pub async fn open_ai_response(request: &OpenAIRequest) -> OpenAIResponse{
             }
         },
         Err(_) => {
-            Err("Bad HTTP Response.")
+            Err("Open AI bad HTTP response")
         }
-    }.expect("Failure to retrieve OpenAI answer.")
+    }
 }
 
 pub async fn return_open_ai_response(request: &OpenAIRequest) -> HttpResponse {
-    let response  = open_ai_response(request).await;
-    HttpResponse::Ok().json(response)
+    match open_ai_response(request).await {
+        Ok(resp) => {HttpResponse::Ok().json(resp)},
+        Err(e) => {HttpResponse::ServiceUnavailable().body(format!("Open AI unreachable. {}", e))}
+    }
 }
 
 pub async fn search_serper_google(query: &String) -> String{
@@ -127,12 +129,22 @@ pub async fn search_serper_google(query: &String) -> String{
         .headers(headers)
         .json(&payload)
         .send()
-        .await.expect("Serper Call failed.");
+        .await;
+
+    let res = match res {
+        Ok(result) => {result},
+        Err(_) => {return String::from("Google Search failed")}
+    };
 
     // Reading the response
-    let data = res.text().await.expect("Received data is empty.");
-    let result:Result<SerperResults, serde_json::Error> = serde_json::from_str(&data);
-    let result = result.expect("Unable to read serper result.");
+    let data = match res.text().await {
+        Ok(data) => {data},
+        Err(_) => {return String::from("Google Search failed")}
+    };
+    let result:SerperResults = match serde_json::from_str(&data){
+        Ok(result) => {result},
+        Err(_) => {return String::from("Google Search failed")}
+    };
 
     let mut message = String::from("Google Search results added to question: \n");
 

@@ -38,7 +38,10 @@ async fn answer_question(req: HttpRequest, mut body: web::Json<messages::OpenAIR
     prepend_message(&mut body, &format!("The current time is {}",  Utc::now()));
     prepend_message(&mut body, &config.examples);
 
-    let response = open_ai_response(&*body).await;
+    let response = match open_ai_response(&*body).await {
+        Ok(resp) => {resp},
+        Err(e) => {return HttpResponse::ServiceUnavailable().body(format!("Open AI unreachable. {}", e))}
+    };
     
     // Run first search query based on Models output and append results.
     append_message(&mut body, &response.choices[0].message.content);
@@ -50,7 +53,10 @@ async fn answer_question(req: HttpRequest, mut body: web::Json<messages::OpenAIR
     // With GPT-4, run a second google search
     if body.model == "gpt-4-turbo" {
         append_message(&mut body, &config.second_instruction);
-        let response = open_ai_response(&*body).await;
+        let response = match open_ai_response(&*body).await {
+            Ok(resp) => {resp},
+            Err(e) => {return HttpResponse::ServiceUnavailable().body(format!("Open AI unreachable. {}", e))}
+        };
         append_message(&mut body, &response.choices[0].message.content);
 
         let query = &response.choices[0].message.content;
@@ -68,7 +74,6 @@ async fn answer_question(req: HttpRequest, mut body: web::Json<messages::OpenAIR
     // Send modified request to OpenAI and return result to user
     return_open_ai_response(&*body).await
 }
-
 
 fn prepend_message(body: &mut web::Json<messages::OpenAIRequest>, message: &String){
     let message  = messages::Message::new("system", &message);
