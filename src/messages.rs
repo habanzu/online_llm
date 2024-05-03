@@ -1,6 +1,5 @@
-use actix_web::http::Error;
 use serde::{Deserialize, Serialize};
-use reqwest::StatusCode;
+use reqwest::{StatusCode, Error};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use dotenv::dotenv;
 use std::env;
@@ -67,7 +66,7 @@ pub struct Item {
     date: Option<String>,
 }
 
-pub async fn open_ai_response(request: &OpenAIRequest) -> OpenAIResponse{
+pub async fn open_ai_response(request: &OpenAIRequest) -> Result<OpenAIResponse, &str>{
     dotenv().ok();
     let open_ai_api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not found in environment");
     
@@ -86,7 +85,7 @@ pub async fn open_ai_response(request: &OpenAIRequest) -> OpenAIResponse{
                 StatusCode::OK => match resp.json::<OpenAIResponse>().await {
                     Ok(openai_resp) => Ok(openai_resp),
                     Err(_) => {
-                        Err("Failed to deserialize OpenAI response:")
+                        Err("Failed to deserialize OpenAI response.")
                     },
                 },
                 _ => {
@@ -97,7 +96,7 @@ pub async fn open_ai_response(request: &OpenAIRequest) -> OpenAIResponse{
         Err(_) => {
             Err("Bad HTTP Response.")
         }
-    }.expect("Failure to retrieve OpenAI answer.")
+    }
 }
 
 pub async fn return_open_ai_response(request: &OpenAIRequest) -> HttpResponse {
