@@ -7,6 +7,7 @@ use actix_web::{web, HttpResponse, HttpRequest};
 use reqwest::Client;
 use log::info;
 use serde_json::json;
+use std::fs;
 
 #[derive(Serialize, Deserialize)]
 pub struct ChatCompletion {
@@ -70,6 +71,21 @@ pub struct Item {
     link: String,
     snippet: String,
     date: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct Config {
+    pub examples: String,
+    pub first_instruction: String,
+    pub second_instruction: String,
+    pub final_instruction: String
+}
+
+impl Config{
+    pub fn new(file_path: String) -> Config{
+        let file_content = fs::read_to_string(file_path).expect("Could not read file.");
+        serde_json::from_str(&file_content).expect("Could not parse config")
+    }
 }
 
 pub fn authorize(req: HttpRequest) -> bool{
