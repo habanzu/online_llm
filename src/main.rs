@@ -54,7 +54,7 @@ async fn answer_question(req: HttpRequest, mut body: web::Json<messages::OpenAIR
     append_message(&mut body, &search_results);
 
     // With GPT-4, run a second google search
-    if body.model == "gpt-4-turbo" {
+    if body.model == "gpt-4o" || body.model == "gpt-4-turbo" {
         append_message(&mut body, &config.second_instruction);
         let response = match open_ai_response(&*body).await {
             Ok(resp) => {resp},

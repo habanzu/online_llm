@@ -14,7 +14,7 @@ from openai import OpenAI
 client = OpenAI(base_url=<URL_ON_REQUEST>, api_key=<API_KEY_ON_REQUEST>)
 
 completion = client.chat.completions.create(
-    model="gpt-4-turbo",
+    model="gpt-4o",
     messages=[{"role": "user", "content": "What is the top news about Gen AI today?"} ]
 )
 
